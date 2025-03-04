@@ -1,0 +1,25 @@
+{
+  "name": "helloworld-v271",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "typechain": "node scripts/generate-types.js",
+    "postcompile": "npm run typechain"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "@openzeppelin/contracts": "^5.2.0",
+    "chai": "^4.2.0",
+    "hardhat": "^2.22.19",
+    "typescript": "^5.8.2",
+    "typechain": "^8.3.1",
+    "@typechain/ethers-v6": "^0.5.1",
+    "@typechain/hardhat": "^9.1.0"
+  }
+}

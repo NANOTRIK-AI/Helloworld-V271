@@ -1,0 +1,20 @@
+{
+  "name": "helloworld-v271",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "typechain": "typechain --target ethers-v5 --out-dir typechain-types 'artifacts/contracts/**/*.json'"
+  },
+  "keywords": [],
+  "author": "",
+  "type": "commonjs",
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "@openzeppelin/contracts": "^5.2.0",
+    "chai": "^4.2.0",
+    "hardhat": "^2.22.19",
+    "typescript": "^5.8.2"
+  }
+}
