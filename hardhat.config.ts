@@ -1,3 +1,6 @@
+import * as dotenv from "dotenv";
+dotenv.config();
+
 import { HardhatUserConfig } from "hardhat/config";
 import "@nomicfoundation/hardhat-toolbox";
 import "@nomicfoundation/hardhat-ethers";
@@ -20,11 +23,35 @@ const config: HardhatUserConfig = {
   networks: {
     hardhat: {
       chainId: 1337,
+      accounts: [
+        {
+          privateKey: "0x1c48003d21bab19690fe5620a8b54ac9be8f85d3b60959874c3bc89e2ee1552d",
+          balance: "10000000000000000000000" // 10000 ETH
+        }
+      ],
       mining: {
         auto: true,
         interval: 0
       }
+    },
+    sepolia: { // Added Ethereum Sepolia network configuration
+      chainId: 11155111,
+      url: process.env.SEPOLIA_RPC || "",
+      accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : []
     }
+  },
+  etherscan: {
+    apiKey: process.env.ETHERSCAN_API_KEY,
+    customChains: [
+      {
+        network: "hardhat",
+        chainId: 1337,
+        urls: {
+          apiURL: "http://127.0.0.1:5173",
+          browserURL: "http://127.0.0.1:5173"
+        }
+      }
+    ]
   },
   paths: {
     sources: "./contracts",
