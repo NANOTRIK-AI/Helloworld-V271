@@ -17,6 +17,7 @@ contract V271Token is ERC20, ERC20Burnable, ERC20Pausable, AccessControl {
     bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
     bytes32 public constant ORACLE_ROLE = keccak256("ORACLE_ROLE");
+    bytes32 public constant SIGNER_ROLE = keccak256("SIGNER_ROLE");
 
     // Mathematical constants (fixed-point with 18 decimals)
     uint256 public constant ZETA_3 = 1202056903159594285; // ζ(3) * 10^18
@@ -50,6 +51,25 @@ contract V271Token is ERC20, ERC20Burnable, ERC20Pausable, AccessControl {
     mapping(address => LinkedNFT[]) private _linkedNFTs;
     mapping(address => StakeInfo) private _stakes;
 
+    // Multisignature transaction structure
+    struct MultiSigTransaction {
+        address proposer;
+        address target;
+        uint256 value;
+        bytes data;
+        uint256 approvalCount;
+        bool executed;
+        uint256 createdAt;
+    }
+
+    // Multisignature variables
+    uint256 public requiredApprovals;
+    uint256 private _transactionCount;
+    mapping(uint256 => MultiSigTransaction) public transactions;
+    mapping(uint256 => mapping(address => bool)) public approvals;
+    mapping(address => bool) public isMultiSigSigner;
+    address[] public signers;
+
     // Events
     event Staked(address indexed user, uint256 amount, uint256 duration);
     event Unstaked(address indexed user, uint256 amount, uint256 reward);
@@ -59,6 +79,14 @@ contract V271Token is ERC20, ERC20Burnable, ERC20Pausable, AccessControl {
     event NFTUnlinked(address indexed owner, address indexed nftContract, uint256 tokenId);
     event PauseWithReason(bytes32 reason);
     event TokensStaked(address indexed staker, uint256 amount, uint256 duration);
+    
+    // Multisignature events
+    event TransactionProposed(uint256 indexed txId, address indexed proposer, address target, uint256 value, bytes data);
+    event TransactionApproved(uint256 indexed txId, address indexed signer);
+    event TransactionExecuted(uint256 indexed txId, address indexed executor);
+    event SignerAdded(address indexed signer);
+    event SignerRemoved(address indexed signer);
+    event ThresholdChanged(uint256 oldThreshold, uint256 newThreshold);
 
     /**
      * @dev Constructor that initializes the token with the initial supply
@@ -69,6 +97,12 @@ contract V271Token is ERC20, ERC20Burnable, ERC20Pausable, AccessControl {
         _grantRole(PAUSER_ROLE, msg.sender);
         _grantRole(MINTER_ROLE, msg.sender);
         _grantRole(ORACLE_ROLE, msg.sender);
+        _grantRole(SIGNER_ROLE, msg.sender);
+        
+        // Initialize multisig with the deployer as the first signer
+        signers.push(msg.sender);
+        isMultiSigSigner[msg.sender] = true;
+        requiredApprovals = 5; // Initially only one approval required
         
         // Mint initial supply to the contract creator
         _mint(msg.sender, INITIAL_SUPPLY);
@@ -383,5 +417,184 @@ contract V271Token is ERC20, ERC20Burnable, ERC20Pausable, AccessControl {
      */
     function getStakeOf(address account) public view returns (StakeInfo memory) {
         return _stakes[account];
+    }
+
+    /**
+     * @dev Proposes a new multisig transaction
+     * @param target The target address for the transaction
+     * @param value The value (in wei) to send with the transaction
+     * @param data The calldata for the transaction
+     * @return The transaction ID
+     */
+    function proposeTransaction(
+        address target,
+        uint256 value,
+        bytes memory data
+    ) public onlyRole(SIGNER_ROLE) returns (uint256) {
+        require(target != address(0), "V271: Invalid target address");
+        
+        uint256 txId = _transactionCount;
+        
+        transactions[txId] = MultiSigTransaction({
+            proposer: msg.sender,
+            target: target,
+            value: value,
+            data: data,
+            approvalCount: 1, // Proposer automatically approves
+            executed: false,
+            createdAt: block.timestamp
+        });
+        
+        approvals[txId][msg.sender] = true;
+        _transactionCount++;
+        
+        emit TransactionProposed(txId, msg.sender, target, value, data);
+        emit TransactionApproved(txId, msg.sender);
+        
+        return txId;
+    }
+    
+    /**
+     * @dev Approves a pending multisig transaction
+     * @param txId The transaction ID to approve
+     */
+    function approveTransaction(uint256 txId) public onlyRole(SIGNER_ROLE) {
+        require(txId < _transactionCount, "V271: Transaction does not exist");
+        require(!transactions[txId].executed, "V271: Transaction already executed");
+        require(!approvals[txId][msg.sender], "V271: Transaction already approved");
+        
+        approvals[txId][msg.sender] = true;
+        transactions[txId].approvalCount++;
+        
+        emit TransactionApproved(txId, msg.sender);
+        
+        // Auto-execute if threshold is reached
+        if (transactions[txId].approvalCount >= requiredApprovals) {
+            executeTransaction(txId);
+        }
+    }
+    
+    /**
+     * @dev Executes a multisig transaction that has sufficient approvals
+     * @param txId The transaction ID to execute
+     * @return success Whether the execution was successful
+     * @return result The execution result data
+     */
+    function executeTransaction(uint256 txId) public returns (bool success, bytes memory result) {
+        require(txId < _transactionCount, "V271: Transaction does not exist");
+        require(!transactions[txId].executed, "V271: Transaction already executed");
+        require(
+            transactions[txId].approvalCount >= requiredApprovals,
+            "V271: Not enough approvals"
+        );
+        
+        MultiSigTransaction storage transaction = transactions[txId];
+        transaction.executed = true;
+        
+        // Execute the transaction
+        (success, result) = transaction.target.call{value: transaction.value}(transaction.data);
+        require(success, "V271: Transaction execution failed");
+        
+        emit TransactionExecuted(txId, msg.sender);
+        
+        return (success, result);
+    }
+    
+    /**
+     * @dev Adds a new signer to the multisig system
+     * @param signer The address to add as a signer
+     */
+    function addSigner(address signer) public {
+        require(hasRole(DEFAULT_ADMIN_ROLE, msg.sender), "V271: Not admin");
+        require(signer != address(0), "V271: Invalid signer address");
+        require(!isMultiSigSigner[signer], "V271: Already a signer");
+        
+        isMultiSigSigner[signer] = true;
+        signers.push(signer);
+        _grantRole(SIGNER_ROLE, signer);
+        
+        emit SignerAdded(signer);
+    }
+    
+    /**
+     * @dev Removes a signer from the multisig system
+     * @param signer The address to remove from signers
+     */
+    function removeSigner(address signer) public {
+        require(hasRole(DEFAULT_ADMIN_ROLE, msg.sender), "V271: Not admin");
+        require(isMultiSigSigner[signer], "V271: Not a signer");
+        require(signers.length > requiredApprovals, "V271: Cannot remove signer below threshold");
+        
+        // Find and remove signer from the array
+        for (uint256 i = 0; i < signers.length; i++) {
+            if (signers[i] == signer) {
+                signers[i] = signers[signers.length - 1];
+                signers.pop();
+                break;
+            }
+        }
+        
+        isMultiSigSigner[signer] = false;
+        _revokeRole(SIGNER_ROLE, signer);
+        
+        emit SignerRemoved(signer);
+    }
+    
+    /**
+     * @dev Changes the required number of approvals for multisig transactions
+     * @param newThreshold The new threshold of required approvals
+     */
+    function changeThreshold(uint256 newThreshold) public {
+        require(hasRole(DEFAULT_ADMIN_ROLE, msg.sender), "V271: Not admin");
+        require(newThreshold > 0, "V271: Threshold must be positive");
+        require(newThreshold <= signers.length, "V271: Threshold exceeds signer count");
+        
+        uint256 oldThreshold = requiredApprovals;
+        requiredApprovals = newThreshold;
+        
+        emit ThresholdChanged(oldThreshold, newThreshold);
+    }
+    
+    /**
+     * @dev Returns the total number of signers in the multisig system
+     * @return The number of signers
+     */
+    function getSignerCount() public view returns (uint256) {
+        return signers.length;
+    }
+    
+    /**
+     * @dev Returns the transaction details
+     * @param txId The transaction ID to query
+     */
+    function getTransaction(uint256 txId) public view returns (
+        address proposer,
+        address target, 
+        uint256 value, 
+        bytes memory data, 
+        uint256 approvalCount, 
+        bool executed,
+        uint256 createdAt
+    ) {
+        require(txId < _transactionCount, "V271: Transaction does not exist");
+        
+        MultiSigTransaction storage txn = transactions[txId];
+        return (
+            txn.proposer,
+            txn.target,
+            txn.value,
+            txn.data,
+            txn.approvalCount,
+            txn.executed,
+            txn.createdAt
+        );
+    }
+    
+    /**
+     * @dev Returns the current transaction count (also the next transaction ID)
+     * @return The transaction count
+     */
+    function getTransactionCount() public view returns (uint256) {
+        return _transactionCount;
     }
 }

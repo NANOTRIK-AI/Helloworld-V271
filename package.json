@@ -20,10 +20,12 @@
     "@typechain/hardhat": "^9.1.0",
     "chai": "^4.2.0",
     "hardhat": "^2.22.19",
+    "hardhat-abi-exporter": "^2.10.1",
     "typechain": "^8.3.1",
     "typescript": "^5.8.2"
   },
   "dependencies": {
-    "dotenv": "^16.4.7"
+    "dotenv": "^16.4.7",
+    "@openzeppelin/contracts": "^5.0.0"
   }
 }

@@ -1,0 +1,116 @@
+import * as dotenv from "dotenv";
+dotenv.config();
+
+import { HardhatUserConfig } from "hardhat/config";
+import "@nomicfoundation/hardhat-toolbox";
+import "@nomicfoundation/hardhat-ethers";
+import "@typechain/hardhat";
+import "@"
+
+import "./tasks/erc20/mint"
+import "./tasks/utils/accounts"
+import "./tasks/utils/balance"
+import "./tasks/utils/block-number"
+import "./tasks/utils/send-eth"
+const MAINNET_RPC_URL = process.env.MAINNET_RPC_URL || "https://eth-mainnet.g.alchemy.com/v2/your-api-key"
+const SEPOLIA_RPC_URL = process.env.SEPOLIA_RPC_URL || "https://eth-sepolia.g.alchemy.com/v2/your-api-key"
+const MATIC_RPC_URL = process.env.MATIC_RPC_URL || "https://polygon-mainnet.g.alchemy.com/v2/your-api-key"
+const MUMBAI_RPC_URL = process.env.MUMBAI_RPC_URL || "https://polygon-mumbai.g.alchemy.com/v2/v3/your-api-key"
+
+const ETHERSCAN_API_KEY = process.env.ETHERSCAN_API_KEY || "CXUWJYKQZ1WC6CYGHV1E3SEHDFF31HPUVE"
+const POLYGONSCAN_API_KEY = process.env.POLYGONSCAN_API_KEY || "api-key"
+const PRIVATE_KEY = process.env.PRIVATE_KEY
+const config: HardhatUserConfig = {
+  defaultNetwork: "hardhat",
+  abiExporter: {
+    path: './abi',
+    runOnCompile: true,
+    clear: true,
+    flat: true,
+    only: [':ERC20$'], // Optional: Filter for specific contracts
+    spacing: 2,
+    pretty: true,
+    format: "json",
+  },
+  namedAccounts: {
+		deployer: {
+			default: 0, // here this will by default take the first account as deployer
+			mainnet: 0, // similarly on mainnet it will take the first account as deployer.
+		},
+		owner: {
+			default: 0,
+		},
+	},
+  solidity: {
+    compilers: [
+      {
+        version: "0.8.28",
+        settings: {
+          optimizer: {
+            enabled: true,
+            runs: 200
+          }
+        }
+      }
+    ]
+  },
+  networks: {
+    hardhat: {
+      chainId: 1337,
+      accounts: [
+        {
+          privateKey: "0x1c48003d21bab19690fe5620a8b54ac9be8f85d3b60959874c3bc89e2ee1552d",
+          balance: "10000000000000000000000" // 10000 ETH
+        }
+      ],
+      mining: {
+        auto: true,
+        interval: 0
+      }
+    },
+    sepolia: { // Added Ethereum Sepolia network configuration
+      chainId: 11155111,
+      url: process.env.SEPOLIA_RPC || "",
+      accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : []
+    },
+    mainnet: { // Added Ethereum Mainnet network configuration
+      chainId: 1,
+      url: process.env.MAINNET_RPC || "",
+      accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : []
+    }
+  },
+  etherscan: {
+    apiKey: process.env.ETHERSCAN_API_KEY,
+    apiKey: {
+			mainnet: ETHERSCAN_API_KEY,
+			sepolia: ETHERSCAN_API_KEY,
+			// Polygon
+			polygon: POLYGONSCAN_API_KEY,
+			polygonMumbai: POLYGONSCAN_API_KEY,
+		},
+    customChains: [
+      {
+        network: "hardhat",
+        chainId: 1337,
+        urls: {
+          apiURL: "http://127.0.0.1:5173",
+          browserURL: "http://127.0.0.1:5173"
+        }
+      }
+    ]
+  },
+  paths: {
+    sources: "./contracts",
+    tests: "./test",
+    cache: "./cache",
+    artifacts: "./artifacts"
+  },
+  ethers: {
+    target: "ethers-v6" // Updated to match our script
+  },
+  mocha: {
+    timeout: 60000 // Set timeout to 60 seconds
+  }
+};
+
+export default config;
